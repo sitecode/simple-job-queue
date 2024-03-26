@@ -458,21 +458,22 @@ class Job_Queue {
 		return $this->queue_type === self::QUEUE_TYPE_BEANSTALKD;
 	}
 
-	protected function getSqlTableName(): string {
+	protected function getSqlTableName(bool $quoted = true): string {
 		$table_name = 'job_queue_jobs';
 		if($this->isMysqlQueueType() && isset($this->options['mysql']['table_name'])) {
 			$table_name = $this->options['mysql']['table_name'];
 		} else if($this->isSqliteQueueType() && isset($this->options['sqlite']['table_name'])) {
 			$table_name = $this->options['sqlite']['table_name'];
 		}
-		return $this->quoteDatabaseKey($table_name);
+		return $quoted ? $this->quoteDatabaseKey($table_name) : $table_name;
 	}
 
 	protected function checkAndIfNecessaryCreateJobQueueTable(): void {
 		$cache =& self::$cache;
 		$exists = isset($cache['job-queue-table-check']);
 		if(empty($exists)) {
-			$table_name = $this->getSqlTableName();
+			//search for unquoted table name
+			$table_name = $this->getSqlTableName(quoted: false);
 			if($this->isMysqlQueueType()) {
 				// Doesn't like this in a prepared statement...
 				$escaped_table_name = $this->connection->quote($table_name);
@@ -481,6 +482,8 @@ class Job_Queue {
 				$statement = $this->connection->prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?");
 				$statement->execute([ $table_name ]);
 			}
+			//create statements using quoted table name
+			$table_name = $this->quoteDatabaseKey($table_name);
 			
 			$has_table = !!count($statement->fetchAll(PDO::FETCH_ASSOC));
 			if(!$has_table) {
